@@ -132,5 +132,5 @@ def test_save_and_restore_share_one_event_bus(tmp_path):
 
 def test_default_factory_builds_a_working_service(tmp_path):
     svc = create_default_service(tmp_path / "sessions")
-    assert svc.adapters() == []
+    assert "terminal_xfce4" in [a.adapter_id for a in svc.adapters()]
     assert svc.list_sessions().sessions == []
