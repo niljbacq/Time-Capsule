@@ -1,9 +1,7 @@
 """sessionctl — the Linux Session Snapshot command-line interface.
 
 Every subcommand is a thin adapter over SessionService. No business logic
-lives here; parsing, dispatch, and formatting only. This round provides
-the read-only half (list, show, adapters, doctor, report stub). Mutation
-commands (save, preview, restore, delete, rename, duplicate) land next.
+lives here; parsing, dispatch, and formatting only.
 """
 
 from __future__ import annotations
@@ -60,6 +58,52 @@ def _cmd_show(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_save(args: argparse.Namespace) -> int:
+    report = _make_service(args).save(
+        session_id=args.session_id,
+        name=args.name,
+        description=args.description,
+        exclude=frozenset(args.exclude or ()),
+    )
+    _emit(_dump_json(report) if args.json else fmt.format_save_report(report))
+    return 0
+
+
+def _cmd_preview(args: argparse.Namespace) -> int:
+    preview = _make_service(args).preview(
+        session_id=args.session_id,
+        exclude=frozenset(args.exclude or ()),
+        duplicate_policy=args.duplicate_policy,
+        timeout_seconds=args.timeout,
+    )
+    _emit(_dump_json(preview) if args.json else fmt.format_preview(preview))
+    return 0
+
+
+def _cmd_restore(args: argparse.Namespace) -> int:
+    service = _make_service(args)
+    if args.dry_run:
+        preview = service.preview(
+            session_id=args.session_id,
+            exclude=frozenset(args.exclude or ()),
+            duplicate_policy=args.duplicate_policy,
+            timeout_seconds=args.timeout,
+        )
+        _emit(_dump_json(preview) if args.json else fmt.format_preview(preview))
+        return 0
+    report = service.restore(
+        session_id=args.session_id,
+        exclude=frozenset(args.exclude or ()),
+        duplicate_policy=args.duplicate_policy,
+        timeout_seconds=args.timeout,
+        concurrency=args.concurrency,
+    )
+    _emit(
+        _dump_json(report) if args.json else fmt.format_restore_report(report)
+    )
+    return 0
+
+
 def _cmd_adapters(args: argparse.Namespace) -> int:
     infos = _make_service(args).adapters()
     _emit(_dump_json(infos) if args.json else fmt.format_adapters(infos))
@@ -102,6 +146,46 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("session_id")
     p.add_argument("--json", action="store_true")
     p.set_defaults(handler=_cmd_show)
+
+    p = sub.add_parser("save", help="capture the current desktop as a session")
+    p.add_argument("session_id")
+    p.add_argument("--name", required=True)
+    p.add_argument("--description", default="")
+    p.add_argument("--exclude", action="append", default=[])
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(handler=_cmd_save)
+
+    p = sub.add_parser(
+        "preview", help="show what restore would do, without launching"
+    )
+    p.add_argument("session_id")
+    p.add_argument("--exclude", action="append", default=[])
+    p.add_argument(
+        "--duplicate-policy",
+        choices=["reuse_existing", "launch_new", "skip_if_running"],
+        default=None,
+    )
+    p.add_argument("--timeout", type=float, default=30.0)
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(handler=_cmd_preview)
+
+    p = sub.add_parser("restore", help="restore a saved session")
+    p.add_argument("session_id")
+    p.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="print the plan without launching anything",
+    )
+    p.add_argument("--exclude", action="append", default=[])
+    p.add_argument(
+        "--duplicate-policy",
+        choices=["reuse_existing", "launch_new", "skip_if_running"],
+        default=None,
+    )
+    p.add_argument("--timeout", type=float, default=30.0)
+    p.add_argument("--concurrency", type=int, default=4)
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(handler=_cmd_restore)
 
     p = sub.add_parser("adapters", help="list installed adapters")
     p.add_argument("--json", action="store_true")

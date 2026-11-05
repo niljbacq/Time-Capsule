@@ -203,3 +203,63 @@ def test_report_returns_2(monkeypatch, tmp_path, capsys):
     _install_factory(monkeypatch, _empty_service(tmp_path))
     assert main(["report", "latest"]) == 2
     assert "planned for a later phase" in capsys.readouterr().err
+
+# ---- save / preview / restore --------------------------------------------
+
+
+def test_save_with_fake_adapter(monkeypatch, tmp_path, capsys):
+    service = _service(tmp_path, procs=(_proc(10, 1, "fakeapp", "/tmp"),))
+    _install_factory(monkeypatch, service)
+    rc = main(["save", "study", "--name", "Study"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "Saved session 'study'" in out
+    assert "fake-10" in out
+
+
+def test_save_json_roundtrip(monkeypatch, tmp_path, capsys):
+    service = _service(tmp_path, procs=(_proc(10, 1, "fakeapp", "/tmp"),))
+    _install_factory(monkeypatch, service)
+    assert main(["save", "study", "--name", "Study", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["session_id"] == "study"
+    assert payload["outcomes"][0]["instance_id"] == "fake-10"
+
+
+def test_preview_shows_launch(monkeypatch, tmp_path, capsys):
+    service = _service(tmp_path, procs=(_proc(10, 1, "fakeapp", "/tmp"),))
+    service.save("study", "Study")
+    _install_factory(monkeypatch, service)
+    assert main(["preview", "study"]) == 0
+    out = capsys.readouterr().out
+    assert "Preview for 'Study'" in out
+    assert "launch" in out
+
+
+def test_restore_dry_run_does_not_call_restore(monkeypatch, tmp_path, capsys):
+    service = _service(tmp_path, procs=(_proc(10, 1, "fakeapp", "/tmp"),))
+    service.save("study", "Study")
+
+    def _boom(*a, **kw):
+        raise AssertionError("restore() must not run under --dry-run")
+
+    monkeypatch.setattr(service, "restore", _boom)
+    _install_factory(monkeypatch, service)
+    assert main(["restore", "study", "--dry-run"]) == 0
+    assert "Preview for 'Study'" in capsys.readouterr().out
+
+
+def test_restore_executes_and_reports(monkeypatch, tmp_path, capsys):
+    service = _service(tmp_path, procs=(_proc(10, 1, "fakeapp", "/tmp"),))
+    service.save("study", "Study")
+    _install_factory(monkeypatch, service)
+    assert main(["restore", "study"]) == 0
+    out = capsys.readouterr().out
+    assert "Restored session 'study'" in out
+    assert "restored" in out
+
+
+def test_restore_missing_session_returns_2(monkeypatch, tmp_path, capsys):
+    _install_factory(monkeypatch, _empty_service(tmp_path))
+    assert main(["restore", "nope"]) == 2
+    assert "error" in capsys.readouterr().err
