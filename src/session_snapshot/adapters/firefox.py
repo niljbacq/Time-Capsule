@@ -43,12 +43,21 @@ _VERIFY_POLL_SECONDS = 0.15
 _CLOCK_FUZZ_SECONDS = 2.0
 
 
+_MAIN_NAMES = frozenset({"firefox", "firefox-bin"})
+
+
 def _is_firefox_main(name: str, argv: list[str] | None) -> bool:
-    if name != _FIREFOX_NAME:
+    if name not in _MAIN_NAMES:
         return False
-    for arg in argv or []:
-        if "contentproc" in arg:
-            return False
+    argv = argv or []
+    # Firefox children are named variously ("Web Content", "RDD Process",
+    # "forkserver", "Socket Process", etc.) but all of them carry
+    # -parentPid in argv. The main process does not. This is more reliable
+    # than looking for -contentproc alone, which misses socket/rdd helpers.
+    if any(arg == "-parentPid" for arg in argv):
+        return False
+    if any("contentproc" in arg for arg in argv):
+        return False
     return True
 
 

@@ -303,3 +303,81 @@ def test_capabilities_declare_limitations():
     assert "browser.startup.page" in by_name["session_restore"].limitation
     assert by_name["tabs_content"].supported is False
     assert by_name["profile_secrets"].supported is False
+
+def test_is_firefox_main_accepts_firefox_bin():
+    assert _is_firefox_main("firefox-bin", ["/usr/lib/firefox/firefox"])
+    assert _is_firefox_main("firefox", ["/usr/lib/firefox/firefox"])
+
+
+def test_is_firefox_main_rejects_child_with_parent_pid():
+    argv = [
+        "/usr/lib/firefox/firefox-bin",
+        "-contentproc",
+        "-parentPid", "6592",
+    ]
+    assert not _is_firefox_main("firefox-bin", argv)
+    assert not _is_firefox_main("firefox", argv)
+
+
+def test_is_firefox_main_rejects_non_content_children():
+    socket_argv = [
+        "/usr/lib/firefox/firefox-bin",
+        "-contentproc",
+        "-parentPid", "6592",
+        "socket",
+    ]
+    assert not _is_firefox_main("Socket Process", socket_argv)
+    rdd_argv = [
+        "/usr/lib/firefox/firefox-bin",
+        "-parentPid", "6592",
+        "rdd",
+    ]
+    assert not _is_firefox_main("RDD Process", rdd_argv)
+
+
+def test_detect_finds_firefox_bin_main_among_children():
+    procs = [
+        _proc(6592, "firefox-bin", argv=["/usr/lib/firefox/firefox"]),
+        _proc(
+            6679,
+            "forkserver",
+            argv=[
+                "/usr/lib/firefox/firefox-bin",
+                "-contentproc",
+                "-parentPid", "6592",
+                "forkserver",
+            ],
+        ),
+        _proc(
+            6815,
+            "Web Content",
+            argv=[
+                "/usr/lib/firefox/firefox-bin",
+                "-contentproc",
+                "-parentPid", "6592",
+                "tab",
+            ],
+        ),
+        _proc(
+            6682,
+            "Socket Process",
+            argv=[
+                "/usr/lib/firefox/firefox-bin",
+                "-contentproc",
+                "-parentPid", "6592",
+                "socket",
+            ],
+        ),
+    ]
+    with patch(
+        "session_snapshot.adapters.firefox.shutil.which",
+        return_value="/usr/bin/firefox",
+    ), patch(
+        "session_snapshot.adapters.firefox._find_firefox_dir",
+        return_value=None,
+    ):
+        instances = FirefoxAdapter().detect(
+            DiscoveryContext(processes=tuple(procs))
+        )
+    assert len(instances) == 1
+    assert instances[0].pid == 6592
