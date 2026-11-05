@@ -1,8 +1,6 @@
 """Human-readable formatting for CLI output.
 
 Kept separate from main.py so it can be unit-tested without argparse.
-The mutation-command formatters (save report, preview, restore report)
-land in a later round alongside the commands that use them.
 """
 
 from __future__ import annotations
@@ -14,6 +12,11 @@ from datetime import datetime
 
 from session_snapshot.models.manifest import Manifest
 from session_snapshot.models.summaries import AdapterInfo, SessionList
+from session_snapshot.report.models import (
+    RestorePreview,
+    RestoreReport,
+    SaveReport,
+)
 from session_snapshot.services.session_service import SessionService
 
 
@@ -124,3 +127,65 @@ def format_doctor(service: SessionService) -> str:
             "Adapters\n" + "\n".join(ad_lines),
         ]
     )
+
+
+def format_save_report(r: SaveReport) -> str:
+    lines = [
+        f"Saved session {r.session_id!r} to {r.manifest_path}",
+        f"Duration: {(r.finished_at - r.started_at).total_seconds():.2f}s",
+        "",
+        f"{'INSTANCE':<28} {'ADAPTER':<18} {'STATUS':<10} MESSAGE",
+    ]
+    for o in r.outcomes:
+        lines.append(
+            f"{o.instance_id:<28} {o.adapter_id:<18} "
+            f"{o.status.value:<10} {o.message}"
+        )
+    if r.warnings:
+        lines.append("")
+        lines.append("Warnings:")
+        for w in r.warnings:
+            lines.append(f"  - {w}")
+    return "\n".join(lines)
+
+
+def format_preview(p: RestorePreview) -> str:
+    lines = [f"Preview for {p.session_name!r} ({p.session_id}):"]
+    for app in p.apps:
+        extra = ""
+        if app.missing_dependencies:
+            extra = f"  missing: {', '.join(app.missing_dependencies)}"
+        elif app.unavailable_paths:
+            extra = f"  unavailable: {', '.join(app.unavailable_paths)}"
+        lines.append(
+            f"  {app.action.value:<10} {app.instance_id:<24} "
+            f"{app.message}{extra}"
+        )
+    if p.warnings:
+        lines.append("")
+        lines.append("Warnings:")
+        for w in p.warnings:
+            lines.append(f"  - {w}")
+    return "\n".join(lines)
+
+
+def format_restore_report(r: RestoreReport) -> str:
+    counts = r.counts()
+    header = ", ".join(f"{v} {k}" for k, v in counts.items() if v) or "no apps"
+    lines = [
+        f"Restored session {r.session_id!r}: {header}",
+        f"Duration: {(r.finished_at - r.started_at).total_seconds():.2f}s",
+        "",
+        f"{'STATUS':<10} {'INSTANCE':<24} {'ADAPTER':<18} MESSAGE",
+    ]
+    for o in r.outcomes:
+        lines.append(
+            f"{o.status.value:<10} {o.instance_id:<24} "
+            f"{o.adapter_id:<18} {o.message}"
+        )
+    if r.warnings:
+        lines.append("")
+        lines.append("Warnings:")
+        for w in r.warnings:
+            lines.append(f"  - {w}")
+    return "\n".join(lines)
