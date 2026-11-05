@@ -1,3 +1,5 @@
+import time
+
 from session_snapshot.adapters.base import SessionAdapter
 from session_snapshot.models.adapter_types import (
     ActionKind,
@@ -19,9 +21,25 @@ class FakeAdapter(SessionAdapter):
     version = 1
     compatibility_class = 2
 
-    def __init__(self, adapter_id: str = "fake", fail_with: Exception | None = None) -> None:
+    def __init__(
+        self,
+        adapter_id: str = "fake",
+        fail_with: Exception | None = None,
+        restore_error: Exception | None = None,
+        restore_delay: float = 0.0,
+        plan: RestorePlan | None = None,
+        verify_result: OpResult | None = None,
+        verify_error: Exception | None = None,
+    ) -> None:
         self.adapter_id = adapter_id
-        self.fail_with = fail_with
+        self.fail_with = fail_with  # raises in capture and restore
+        self.restore_error = restore_error  # raises in restore only
+        self.restore_delay = restore_delay
+        self.plan = plan
+        self.verify_result = verify_result
+        self.verify_error = verify_error
+        self.calls: list[str] = []
+        self.last_ctx: RestoreContext | None = None
 
     def capabilities(self) -> list[Capability]:
         return [Capability(name="cwd", supported=True)]
@@ -53,12 +71,22 @@ class FakeAdapter(SessionAdapter):
         )
 
     def plan_restore(self, snapshot: AppEntry, ctx: RestoreContext) -> RestorePlan:
-        return RestorePlan(action=ActionKind.LAUNCH, message="would launch fakeapp")
+        self.calls.append("plan")
+        self.last_ctx = ctx
+        return self.plan or RestorePlan(action=ActionKind.LAUNCH, message="would launch fakeapp")
 
     def restore(self, snapshot: AppEntry, plan: RestorePlan, ctx: RestoreContext) -> RestoreHandle:
+        self.calls.append("restore")
         if self.fail_with:
             raise self.fail_with
+        if self.restore_error:
+            raise self.restore_error
+        if self.restore_delay:
+            time.sleep(self.restore_delay)
         return RestoreHandle(instance_id=snapshot.instance_id, pid=1234, launched_at=0.0)
 
     def verify(self, snapshot: AppEntry, handle: RestoreHandle, ctx: RestoreContext) -> OpResult:
-        return OpResult.restored("fake state verified")
+        self.calls.append("verify")
+        if self.verify_error:
+            raise self.verify_error
+        return self.verify_result or OpResult.restored("fake state verified")

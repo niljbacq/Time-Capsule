@@ -16,6 +16,11 @@ class EventKind(str, Enum):
     APP_CAPTURE_FAILED = "app_capture_failed"
     APP_EXCLUDED = "app_excluded"
     SAVE_FINISHED = "save_finished"
+    RESTORE_STARTED = "restore_started"
+    APP_PLANNED = "app_planned"
+    APP_RESTORING = "app_restoring"
+    APP_RESULT = "app_result"
+    RESTORE_FINISHED = "restore_finished"
 
 
 @dataclass(frozen=True)
