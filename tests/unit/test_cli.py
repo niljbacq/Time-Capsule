@@ -263,3 +263,45 @@ def test_restore_missing_session_returns_2(monkeypatch, tmp_path, capsys):
     _install_factory(monkeypatch, _empty_service(tmp_path))
     assert main(["restore", "nope"]) == 2
     assert "error" in capsys.readouterr().err
+
+# ---- delete / rename / duplicate ----------------------------------------
+
+
+def test_delete_with_yes(monkeypatch, tmp_path, capsys):
+    _seed(tmp_path)
+    _install_factory(monkeypatch, _empty_service(tmp_path))
+    assert main(["delete", "study", "-y"]) == 0
+    assert "deleted study" in capsys.readouterr().out
+    assert main(["show", "study"]) == 2
+
+
+def test_delete_confirmation_aborts(monkeypatch, tmp_path, capsys):
+    _seed(tmp_path)
+    _install_factory(monkeypatch, _empty_service(tmp_path))
+    import io
+    monkeypatch.setattr("sys.stdin", io.StringIO("n\n"))
+    assert main(["delete", "study"]) == 1
+    assert main(["show", "study"]) == 0
+
+
+def test_rename(monkeypatch, tmp_path, capsys):
+    _seed(tmp_path)
+    _install_factory(monkeypatch, _empty_service(tmp_path))
+    assert main(["rename", "study", "New Name"]) == 0
+    out = capsys.readouterr().out
+    assert "renamed study" in out
+    assert "New Name" in out
+
+
+def test_duplicate(monkeypatch, tmp_path, capsys):
+    _seed(tmp_path)
+    _install_factory(monkeypatch, _empty_service(tmp_path))
+    assert main(["duplicate", "study", "copy", "--name", "Copy"]) == 0
+    assert "duplicated study to copy" in capsys.readouterr().out
+
+
+def test_duplicate_conflict_returns_2(monkeypatch, tmp_path, capsys):
+    _seed(tmp_path)
+    _install_factory(monkeypatch, _empty_service(tmp_path))
+    assert main(["duplicate", "study", "study", "--name", "Same"]) == 2
+    assert "error" in capsys.readouterr().err

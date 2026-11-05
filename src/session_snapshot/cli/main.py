@@ -104,6 +104,34 @@ def _cmd_restore(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_delete(args: argparse.Namespace) -> int:
+    service = _make_service(args)
+    if not args.yes:
+        sys.stdout.write(f"Delete session {args.session_id!r}? [y/N] ")
+        sys.stdout.flush()
+        answer = sys.stdin.readline().strip().lower()
+        if answer not in {"y", "yes"}:
+            sys.stderr.write("aborted\n")
+            return 1
+    service.delete_session(args.session_id)
+    _emit(f"deleted {args.session_id}")
+    return 0
+
+
+def _cmd_rename(args: argparse.Namespace) -> int:
+    manifest = _make_service(args).rename_session(args.session_id, args.new_name)
+    _emit(f"renamed {manifest.session.id} to {manifest.session.name!r}")
+    return 0
+
+
+def _cmd_duplicate(args: argparse.Namespace) -> int:
+    manifest = _make_service(args).duplicate_session(
+        args.session_id, args.new_id, args.name
+    )
+    _emit(f"duplicated {args.session_id} to {manifest.session.id}")
+    return 0
+
+
 def _cmd_adapters(args: argparse.Namespace) -> int:
     infos = _make_service(args).adapters()
     _emit(_dump_json(infos) if args.json else fmt.format_adapters(infos))
@@ -186,6 +214,22 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--concurrency", type=int, default=4)
     p.add_argument("--json", action="store_true")
     p.set_defaults(handler=_cmd_restore)
+
+    p = sub.add_parser("delete", help="delete a session manifest")
+    p.add_argument("session_id")
+    p.add_argument("-y", "--yes", action="store_true", help="skip confirmation")
+    p.set_defaults(handler=_cmd_delete)
+
+    p = sub.add_parser("rename", help="rename a session")
+    p.add_argument("session_id")
+    p.add_argument("new_name")
+    p.set_defaults(handler=_cmd_rename)
+
+    p = sub.add_parser("duplicate", help="copy a session under a new id and name")
+    p.add_argument("session_id")
+    p.add_argument("new_id")
+    p.add_argument("--name", required=True)
+    p.set_defaults(handler=_cmd_duplicate)
 
     p = sub.add_parser("adapters", help="list installed adapters")
     p.add_argument("--json", action="store_true")
