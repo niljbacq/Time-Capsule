@@ -2,7 +2,11 @@ from session_snapshot.adapters.registry import AdapterRegistry
 from session_snapshot.core.manager import SessionManager
 from session_snapshot.core.restore import RestoreEngine
 from session_snapshot.models.adapter_types import ActionKind, ProcessInfo, RestorePlan
-from session_snapshot.models.manifest import EnvironmentInfo, Geometry
+from session_snapshot.models.manifest import (
+    EnvironmentInfo,
+    Geometry,
+    WindowEntry,
+)
 from session_snapshot.models.results import OpResult, Reason, Status
 from session_snapshot.store.manifests import ManifestStore
 from session_snapshot.windows.base import LiveWindow, WindowBackend
@@ -119,3 +123,45 @@ def test_no_backend_leaves_details_without_windows(tmp_path):
     outcome = restore(store, FakeAdapter(), None)
     assert outcome.status is Status.RESTORED
     assert "windows" not in outcome.details
+
+
+def test_apply_saved_windows_skips_when_launched_pid_not_visible():
+    from session_snapshot.windows.apply import apply_saved_windows
+
+    # Backend has one window owned by pid 42; launched pid 1234 is not in
+    # the process snapshot (client/server: the client has already exited).
+    backend = FakeBackend([live(42, "0xa")])
+    saved = [
+        WindowEntry(window_id="0xa", workspace=1, state="normal", geometry=GEO)
+    ]
+    placed, warnings = apply_saved_windows(
+        backend, lambda: (), 1234, saved, wait_seconds=0.0
+    )
+    assert placed == 0
+    assert warnings == [
+        "expected 1 window(s) but found 0; window placement skipped"
+    ]
+    assert backend.placed == []
+
+
+def test_client_server_app_is_restored_but_placement_skips(tmp_path, monkeypatch):
+    from functools import partial
+
+    from session_snapshot.windows import apply as apply_mod
+
+    monkeypatch.setattr(
+        "session_snapshot.core.restore.apply_saved_windows",
+        partial(apply_mod.apply_saved_windows, wait_seconds=0.0),
+    )
+    store = saved_store(tmp_path)
+    # Empty process snapshot: the client that launched has exited.
+    backend = FakeBackend([live(42, "0xa")])
+    outcome = restore(store, FakeAdapter(), backend)
+    assert outcome.status is Status.RESTORED
+    assert backend.placed == []
+    assert outcome.details["windows"] == {
+        "placed": 0,
+        "warnings": [
+            "expected 1 window(s) but found 0; window placement skipped"
+        ],
+    }

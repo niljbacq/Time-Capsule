@@ -101,7 +101,16 @@ class TerminalAdapter(SessionAdapter):
                 supported=False,
                 limitation="shell history, environment, jobs and scrollback are not restored",
             ),
-        ]
+        Capability(
+            name="window_placement",
+            supported=False,
+            limitation=(
+                "terminal windows are owned by a shared server process; "
+                "placement works only when no server is already running, "
+                "which cannot be guaranteed at restore time"
+            ),
+        ),
+    ]
 
     # ---------------------------------------------------------------- detect
 

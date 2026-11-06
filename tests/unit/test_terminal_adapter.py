@@ -257,7 +257,8 @@ def test_capabilities_returns_list_with_supported_and_unsupported_entries():
     assert by_name["window_grouping"].supported is False
     assert by_name["window_grouping"].limitation
     assert by_name["shell_state"].supported is False
-
+    assert by_name["window_placement"].supported is False
+    assert by_name["window_placement"].limitation
 
 def test_adapter_has_required_class_attributes():
     assert TerminalAdapter.adapter_id == "terminal_xfce4"
