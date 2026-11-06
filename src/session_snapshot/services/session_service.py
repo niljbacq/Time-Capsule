@@ -15,6 +15,7 @@ from session_snapshot.models.summaries import (
 )
 from session_snapshot.report.models import RestorePreview, RestoreReport, SaveReport
 from session_snapshot.store.manifests import ManifestError, ManifestStore
+from session_snapshot.windows.base import WindowBackend
 
 
 class SessionService:
@@ -27,12 +28,18 @@ class SessionService:
         process_source: ProcessSource,
         bus: EventBus | None = None,
         env_provider: Callable[[], EnvironmentInfo] | None = None,
+        window_backend: WindowBackend | None = None,
     ) -> None:
         self.registry = registry
         self.store = store
         self.bus = bus or EventBus()
         self._manager = SessionManager(
-            registry, store, process_source, bus=self.bus, env_provider=env_provider
+            registry,
+            store,
+            process_source,
+            bus=self.bus,
+            env_provider=env_provider,
+            window_backend=window_backend,
         )
         self._restorer = RestoreEngine(
             registry, store, process_source, bus=self.bus, env_provider=env_provider
