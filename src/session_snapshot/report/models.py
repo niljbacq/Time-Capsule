@@ -31,6 +31,12 @@ class SaveReport(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     manifest_path: str
 
+    def counts(self) -> dict[str, int]:
+        result = {status.value: 0 for status in SaveStatus}
+        for outcome in self.outcomes:
+            result[outcome.status.value] += 1
+        return result
+
 
 class AppRestoreOutcome(BaseModel):
     instance_id: str

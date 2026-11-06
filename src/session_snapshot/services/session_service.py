@@ -14,6 +14,8 @@ from session_snapshot.models.summaries import (
     SessionSummary,
 )
 from session_snapshot.report.models import RestorePreview, RestoreReport, SaveReport
+from datetime import datetime
+from session_snapshot.core.oplog import OperationEntry, OperationLog
 from session_snapshot.store.manifests import ManifestError, ManifestStore
 from session_snapshot.windows.base import WindowBackend
 
@@ -29,6 +31,7 @@ class SessionService:
         bus: EventBus | None = None,
         env_provider: Callable[[], EnvironmentInfo] | None = None,
         window_backend: WindowBackend | None = None,
+        oplog: OperationLog | None = None,
     ) -> None:
         self.registry = registry
         self.store = store
@@ -49,6 +52,7 @@ class SessionService:
             env_provider=env_provider,
             window_backend=window_backend,
         )
+        self._oplog = oplog or OperationLog(store.root)
 
     # ---- save / restore ---------------------------------------------
 
@@ -59,7 +63,19 @@ class SessionService:
         description: str = "",
         exclude: Collection[str] = frozenset(),
     ) -> SaveReport:
-        return self._manager.save(session_id, name, description, exclude)
+        report = self._manager.save(session_id, name, description, exclude)
+        self._oplog.append(
+            OperationEntry(
+                kind="save",
+                session_id=session_id,
+                started_at=report.started_at,
+                finished_at=report.finished_at,
+                counts=report.counts(),
+                warnings=report.warnings,
+                summary=f"Saved session '{name}' ({len(report.outcomes)} apps)",
+            )
+        )
+        return report
 
     def preview(
         self,
@@ -78,9 +94,21 @@ class SessionService:
         timeout_seconds: float = 30.0,
         concurrency: int = 4,
     ) -> RestoreReport:
-        return self._restorer.restore(
+        report = self._restorer.restore(
             session_id, exclude, duplicate_policy, timeout_seconds, concurrency
         )
+        self._oplog.append(
+            OperationEntry(
+                kind="restore",
+                session_id=session_id,
+                started_at=report.started_at,
+                finished_at=report.finished_at,
+                counts=report.counts(),
+                warnings=report.warnings,
+                summary=f"Restored session '{session_id}' ({report.counts()})",
+            )
+        )
+        return report
 
     # ---- session library --------------------------------------------
 
