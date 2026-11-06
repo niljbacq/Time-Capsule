@@ -18,6 +18,8 @@ from session_snapshot.models.manifest import (
 from session_snapshot.models.results import OpResult, Reason
 from session_snapshot.report.models import AppSaveOutcome, SaveReport, SaveStatus
 from session_snapshot.store.manifests import ManifestError, ManifestStore
+from session_snapshot.windows.base import WindowBackend
+from session_snapshot.windows.matching import match_windows
 
 
 def _failed_outcome(instance_id: str, adapter_id: str, err: OpResult) -> AppSaveOutcome:
@@ -42,6 +44,32 @@ def _check_entry(entry: object, adapter_id: str, instance_id: str) -> str | None
     return None
 
 
+def _attach_windows(
+    backend: WindowBackend | None,
+    entries: list[AppEntry],
+    pids: list[tuple[str, int | None]],
+    processes,
+    environment: EnvironmentInfo,
+    warnings: list[str],
+) -> EnvironmentInfo:
+    """Add window placement data to entries. Never raises: windows are an extra."""
+    if backend is None:
+        return environment
+    try:
+        windows = backend.list_windows()
+        matched, notes = match_windows(pids, processes, windows)
+        wm = backend.window_manager()
+    except Exception as exc:  # noqa: BLE001 - window data must never break a save
+        warnings.append(f"window capture failed: {type(exc).__name__}: {exc}")
+        return environment
+    for entry in entries:
+        entry.windows = matched.get(entry.instance_id, [])
+    warnings.extend(notes)
+    if wm:
+        environment = environment.model_copy(update={"window_manager": wm})
+    return environment
+
+
 class SessionManager:
     def __init__(
         self,
@@ -50,12 +78,14 @@ class SessionManager:
         process_source: ProcessSource,
         bus: EventBus | None = None,
         env_provider: Callable[[], EnvironmentInfo] | None = None,
+        window_backend: WindowBackend | None = None,
     ) -> None:
         self.registry = registry
         self.store = store
         self.process_source = process_source
         self.bus = bus or EventBus()
         self._env_provider = env_provider or detect_environment
+        self._window_backend = window_backend
 
     def save(
         self,
@@ -76,6 +106,7 @@ class SessionManager:
         outcomes: list[AppSaveOutcome] = []
         entries: list[AppEntry] = []
         seen: set[str] = set()
+        pids: list[tuple[str, int | None]] = []
 
         for adapter in self.registry.all():
             aid = adapter.adapter_id
@@ -136,6 +167,7 @@ class SessionManager:
                     continue
 
                 entries.append(entry)
+                pids.append((iid, instance.pid))
                 outcomes.append(
                     AppSaveOutcome(
                         instance_id=iid,
@@ -152,6 +184,10 @@ class SessionManager:
         if not entries:
             warnings.append("No applications were captured.")
 
+        environment = _attach_windows(
+            self._window_backend, entries, pids, processes, self._env_provider(), warnings
+        )
+
         manifest = Manifest(
             schema_version=1,
             session=SessionMeta(
@@ -161,7 +197,7 @@ class SessionManager:
                 saved_at=started,
                 tool_version=__version__,
             ),
-            environment=self._env_provider(),
+            environment=environment,
             apps=entries,
         )
         try:
