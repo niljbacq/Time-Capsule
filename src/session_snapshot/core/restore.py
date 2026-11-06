@@ -26,6 +26,8 @@ from session_snapshot.report.models import (
     RestoreReport,
 )
 from session_snapshot.store.manifests import ManifestStore
+from session_snapshot.windows.apply import apply_saved_windows
+from session_snapshot.windows.base import WindowBackend
 
 DuplicatePolicy = Literal["reuse_existing", "launch_new", "skip_if_running"]
 _POLL_SECONDS = 0.02
@@ -70,12 +72,14 @@ class RestoreEngine:
         process_source: ProcessSource,
         bus: EventBus | None = None,
         env_provider: Callable[[], EnvironmentInfo] | None = None,
+        window_backend: WindowBackend | None = None,
     ) -> None:
         self.registry = registry
         self.store = store
         self.process_source = process_source
         self.bus = bus or EventBus()
         self._env_provider = env_provider or detect_environment
+        self._window_backend = window_backend
 
     # ---- public API -------------------------------------------------
 
@@ -295,6 +299,34 @@ class RestoreEngine:
     def _run_app(
         self, item: _Item, ctx: RestoreContext, started: dict[str, float]
     ) -> AppRestoreOutcome:
+        pids: dict[str, int] = {}
+        outcome = self._run_app_core(item, ctx, started, pids)
+        return self._place_windows(item, outcome, pids)
+
+    def _place_windows(
+        self, item: _Item, outcome: AppRestoreOutcome, pids: dict[str, int]
+    ) -> AppRestoreOutcome:
+        """Place windows of a launched, verified app. Never changes the status."""
+        backend = self._window_backend
+        iid = item.entry.instance_id
+        if (
+            backend is None
+            or outcome.status is not Status.RESTORED
+            or item.plan is None
+            or item.plan.action is not ActionKind.LAUNCH
+            or not item.entry.windows
+            or iid not in pids
+        ):
+            return outcome
+        placed, warnings = apply_saved_windows(
+            backend, self.process_source.snapshot, pids[iid], item.entry.windows
+        )
+        outcome.details["windows"] = {"placed": placed, "warnings": warnings}
+        return outcome
+
+    def _run_app_core(
+        self, item: _Item, ctx: RestoreContext, started: dict[str, float], pids: dict[str, int]
+    ) -> AppRestoreOutcome:
         entry, adapter, plan = item.entry, item.adapter, item.plan
         iid = entry.instance_id
         aid = adapter.adapter_id
@@ -305,6 +337,8 @@ class RestoreEngine:
                 EventKind.APP_RESTORING, f"Restoring {iid}", app=iid, action=plan.action.value
             )
             handle, err = guarded(aid, "restore", adapter.restore, entry, plan, ctx)
+            if err is None and isinstance(handle, RestoreHandle) and handle.pid is not None:
+                pids[iid] = handle.pid
             if err is None and not isinstance(handle, RestoreHandle):
                 err = OpResult.failed(
                     Reason.ADAPTER_ERROR,
