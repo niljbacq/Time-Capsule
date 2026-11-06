@@ -32,7 +32,7 @@ class LiveWindow:
 
 
 class WindowBackend(ABC):
-    """Reads the live window list. Placement methods arrive in a later phase."""
+    """Reads the live window list and moves windows."""
 
     @abstractmethod
     def available(self) -> bool:
@@ -45,3 +45,13 @@ class WindowBackend(ABC):
     @abstractmethod
     def list_windows(self) -> list[LiveWindow]:
         """All current windows. Returns [] if the display cannot be read."""
+
+    def place_window(
+        self,
+        window_id: str,
+        workspace: int | None,
+        state: Literal["normal", "maximized", "fullscreen"],
+        geometry: Geometry | None,
+    ) -> list[str]:
+        """Move a window. Returns warnings (empty on success). Default: unsupported."""
+        return [f"{window_id}: window placement is not supported by this backend"]

@@ -2,8 +2,10 @@
 
 import re
 import subprocess
+from typing import Literal
 from collections.abc import Sequence
 
+from session_snapshot.models.manifest import Geometry
 from session_snapshot.windows.base import (
     CommandResult,
     CommandRunner,
@@ -77,3 +79,30 @@ class X11Backend(WindowBackend):
                 )
             )
         return windows
+
+    def place_window(
+        self,
+        window_id: str,
+        workspace: int | None,
+        state: Literal["normal", "maximized", "fullscreen"],
+        geometry: Geometry | None,
+    ) -> list[str]:
+        """Apply workspace, state and geometry with wmctrl. Returns warnings."""
+        warnings: list[str] = []
+
+        def step(label: str, *args: str) -> None:
+            if self._run(["wmctrl", "-i", "-r", window_id, *args]).returncode != 0:
+                warnings.append(f"{window_id}: {label} failed")
+
+        step("clear maximize", "-b", "remove,maximized_vert,maximized_horz")
+        step("clear fullscreen", "-b", "remove,fullscreen")
+        if workspace is not None:
+            step("workspace", "-t", str(workspace))
+        if state == "normal" and geometry is not None:
+            g = geometry
+            step("move/resize", "-e", f"10,{g.x},{g.y},{g.width},{g.height}")
+        elif state == "maximized":
+            step("maximize", "-b", "add,maximized_vert,maximized_horz")
+        elif state == "fullscreen":
+            step("fullscreen", "-b", "add,fullscreen")
+        return warnings
