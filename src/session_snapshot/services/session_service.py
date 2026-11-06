@@ -42,7 +42,12 @@ class SessionService:
             window_backend=window_backend,
         )
         self._restorer = RestoreEngine(
-            registry, store, process_source, bus=self.bus, env_provider=env_provider
+            registry,
+            store,
+            process_source,
+            bus=self.bus,
+            env_provider=env_provider,
+            window_backend=window_backend,
         )
 
     # ---- save / restore ---------------------------------------------
