@@ -172,6 +172,16 @@ class SessionService:
 
     # ---- adapters ---------------------------------------------------
 
+    # ---- operations -------------------------------------------------
+
+    def list_operations(self, limit: int = 50) -> list[OperationEntry]:
+        """Return recent operations, newest first by finished_at."""
+        return self._oplog.list(limit=limit)
+
+    def get_operation(self, entry_id: str) -> OperationEntry | None:
+        """Return one operation by id, or None if not found."""
+        return self._oplog.get(entry_id)
+
     def adapters(self) -> list[AdapterInfo]:
         infos: list[AdapterInfo] = []
         for adapter in self.registry.all():

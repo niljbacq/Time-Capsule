@@ -134,3 +134,69 @@ def test_default_factory_builds_a_working_service(tmp_path):
     svc = create_default_service(tmp_path / "sessions")
     assert "terminal_xfce4" in [a.adapter_id for a in svc.adapters()]
     assert svc.list_sessions().sessions == []
+
+
+# ---- operations ----------------------------------------------------------
+
+
+def test_list_operations_empty_when_no_ops(tmp_path):
+    from session_snapshot.adapters.registry import AdapterRegistry
+    from session_snapshot.core.oplog import OperationLog
+    from session_snapshot.services.session_service import SessionService
+    from session_snapshot.store.manifests import ManifestStore
+    from tests.fakes.fake_process_source import FakeProcessSource
+
+    service = SessionService(
+        AdapterRegistry(),
+        ManifestStore(tmp_path / "sessions"),
+        FakeProcessSource(()),
+        oplog=OperationLog(tmp_path / "opdata"),
+    )
+    assert service.list_operations() == []
+
+
+def test_list_operations_returns_entries(tmp_path):
+    from datetime import datetime, timezone
+
+    from session_snapshot.adapters.registry import AdapterRegistry
+    from session_snapshot.core.oplog import OperationEntry, OperationLog
+    from session_snapshot.services.session_service import SessionService
+    from session_snapshot.store.manifests import ManifestStore
+    from tests.fakes.fake_process_source import FakeProcessSource
+
+    log = OperationLog(tmp_path / "opdata")
+    now = datetime.now(timezone.utc)
+    log.append(
+        OperationEntry(
+            kind="save",
+            session_id="s1",
+            started_at=now,
+            finished_at=now,
+            summary="test",
+        )
+    )
+    service = SessionService(
+        AdapterRegistry(),
+        ManifestStore(tmp_path / "sessions"),
+        FakeProcessSource(()),
+        oplog=log,
+    )
+    entries = service.list_operations()
+    assert len(entries) == 1
+    assert entries[0].session_id == "s1"
+
+
+def test_get_operation_returns_none_for_missing(tmp_path):
+    from session_snapshot.adapters.registry import AdapterRegistry
+    from session_snapshot.core.oplog import OperationLog
+    from session_snapshot.services.session_service import SessionService
+    from session_snapshot.store.manifests import ManifestStore
+    from tests.fakes.fake_process_source import FakeProcessSource
+
+    service = SessionService(
+        AdapterRegistry(),
+        ManifestStore(tmp_path / "sessions"),
+        FakeProcessSource(()),
+        oplog=OperationLog(tmp_path / "opdata"),
+    )
+    assert service.get_operation("nonexistent") is None
