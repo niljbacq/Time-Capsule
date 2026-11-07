@@ -107,7 +107,7 @@ def format_doctor(service: SessionService) -> str:
     store_bits = f"Store    : {store_root if store_root else '(default)'}"
 
     bin_lines: list[str] = []
-    for exe in ("xfce4-terminal", "wmctrl", "xprop", "xdotool", "tmux"):
+    for exe in ("xfce4-terminal", "wmctrl", "xprop", "xdotool"):
         path = shutil.which(exe)
         bin_lines.append(f"  {exe:<16} {path or 'NOT FOUND'}")
 

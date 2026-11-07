@@ -139,11 +139,35 @@ def _cmd_adapters(args: argparse.Namespace) -> int:
 
 
 def _cmd_report(args: argparse.Namespace) -> int:
-    sys.stderr.write(
-        "error: report persistence is planned for a later phase; no "
-        "operation history is stored yet.\n"
-    )
-    return 2
+    from session_snapshot.cli.format_oplog import format_oplog_entry, format_oplog_list
+
+    service = _make_service(args)
+    target = args.target
+    if target == "list":
+        entries = service.list_operations()
+        _emit(_dump_json(entries) if args.json else format_oplog_list(entries))
+        return 0
+    if target == "latest":
+        entries = service.list_operations(limit=1)
+        if not entries:
+            _emit("null" if args.json else "No operations recorded yet.")
+            return 0
+        entry = entries[0]
+    else:
+        entry = service.get_operation(target)
+        if entry is None:
+            matches = [e for e in service.list_operations(limit=500) if e.id.startswith(target)]
+            if len(matches) > 1:
+                sys.stderr.write(
+                    f"error: operation id prefix {target!r} is ambiguous; use more characters\n"
+                )
+                return 2
+            entry = matches[0] if matches else None
+        if entry is None:
+            sys.stderr.write(f"error: no operation matches {target!r}\n")
+            return 2
+    _emit(_dump_json(entry) if args.json else format_oplog_entry(entry))
+    return 0
 
 
 def _cmd_doctor(args: argparse.Namespace) -> int:
@@ -235,8 +259,9 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--json", action="store_true")
     p.set_defaults(handler=_cmd_adapters)
 
-    p = sub.add_parser("report", help="show operation reports (planned)")
+    p = sub.add_parser("report", help="show operation history: latest, list, or an id")
     p.add_argument("target", nargs="?", default="latest")
+    p.add_argument("--json", action="store_true")
     p.set_defaults(handler=_cmd_report)
 
     p = sub.add_parser("doctor", help="print diagnostic information")

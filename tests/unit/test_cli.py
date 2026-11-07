@@ -199,10 +199,10 @@ def test_doctor_prints_sections(monkeypatch, tmp_path, capsys):
         assert section in out
 
 
-def test_report_returns_2(monkeypatch, tmp_path, capsys):
+def test_report_latest_with_empty_log(monkeypatch, tmp_path, capsys):
     _install_factory(monkeypatch, _empty_service(tmp_path))
-    assert main(["report", "latest"]) == 2
-    assert "planned for a later phase" in capsys.readouterr().err
+    assert main(["report", "latest"]) == 0
+    assert "No operations" in capsys.readouterr().out
 
 # ---- save / preview / restore --------------------------------------------
 
