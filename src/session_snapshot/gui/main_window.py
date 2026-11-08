@@ -28,6 +28,9 @@ from session_snapshot.gui.navigation import (
 )
 from session_snapshot.gui.settings import MIN_WINDOW_SIZE, GuiSettings, SettingsStore
 from session_snapshot.gui.sidebar import Sidebar
+from session_snapshot.gui.controllers.sessions_controller import SessionsController
+from session_snapshot.gui.sessions_page import SessionsPage
+from session_snapshot.services.factory import create_default_service
 from session_snapshot.gui.theme import (
     Palette,
     normalize_preference,
@@ -57,13 +60,25 @@ def palette_for_preference(preference: object, system_dark: bool | None = None) 
 class MainWindow(QMainWindow):
     """Shell window: sidebar plus one page per navigation entry."""
 
-    def __init__(self, store: SettingsStore | None = None, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        store: SettingsStore | None = None,
+        parent: QWidget | None = None,
+        *,
+        sessions_controller: SessionsController | None = None,
+    ) -> None:
         super().__init__(parent)
         self._store = store if store is not None else SettingsStore()
         self._settings: GuiSettings = self._store.load()
         self._state = NavigationState(collapsed=self._settings.sidebar_collapsed)
         self._pages: dict[str, QWidget] = {}
         self.save_error: OSError | None = None
+        self._sessions_controller = (
+            sessions_controller
+            if sessions_controller is not None
+            else SessionsController(create_default_service())
+        )
+        self._sessions_page: SessionsPage | None = None
 
         self.setWindowTitle(WINDOW_TITLE)
         self.setMinimumSize(*MIN_WINDOW_SIZE)
@@ -86,7 +101,11 @@ class MainWindow(QMainWindow):
         self._stack = QStackedWidget(central)
         self._stack.setObjectName("PageStack")
         for item in NAV_ITEMS:
-            page = self._build_page(item.label)
+            if item.id == "sessions":
+                page: QWidget = SessionsPage(self._sessions_controller, central)
+                self._sessions_page = page
+            else:
+                page = self._build_page(item.label)
             self._pages[item.id] = page
             self._stack.addWidget(page)
 
@@ -192,6 +211,10 @@ class MainWindow(QMainWindow):
     @property
     def state(self) -> NavigationState:
         return self._state
+
+    @property
+    def sessions_page(self) -> SessionsPage | None:
+        return self._sessions_page
 
     def page(self, page_id: str) -> QWidget | None:
         return self._pages.get(page_id)
