@@ -7,7 +7,11 @@ from datetime import datetime
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QHBoxLayout,
+    QInputDialog,
     QLabel,
+    QMessageBox,
+    QPushButton,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -81,6 +85,22 @@ class SessionsPage(QWidget):
             self.table.setColumnWidth(index, width)
         layout.addWidget(self.table, 1)
 
+        action_bar = QHBoxLayout()
+        self.rename_button = QPushButton("Rename…", self)
+        self.rename_button.setObjectName(styles.SECONDARY_BUTTON)
+        self.rename_button.setEnabled(False)
+        self.rename_button.clicked.connect(self._on_rename_clicked)
+        action_bar.addWidget(self.rename_button)
+        self.delete_button = QPushButton("Delete…", self)
+        self.delete_button.setObjectName(styles.SECONDARY_BUTTON)
+        self.delete_button.setEnabled(False)
+        self.delete_button.clicked.connect(self._on_delete_clicked)
+        action_bar.addWidget(self.delete_button)
+        action_bar.addStretch(1)
+        layout.addLayout(action_bar)
+
+        self.table.itemSelectionChanged.connect(self._update_action_state)
+
     # -- data flow --------------------------------------------------------
 
     def refresh(self) -> None:
@@ -149,3 +169,54 @@ class SessionsPage(QWidget):
         if not rows:
             return None
         return self.session_id_at(rows[0].row())
+
+    def _selected_row(self) -> int | None:
+        rows = self.table.selectionModel().selectedRows()
+        return None if not rows else rows[0].row()
+
+    def _update_action_state(self) -> None:
+        has_selection = self.selected_session_id() is not None
+        self.rename_button.setEnabled(has_selection)
+        self.delete_button.setEnabled(has_selection)
+
+    def rename_session(self, session_id: str, new_name: str) -> bool:
+        ok = self._controller.rename_session(session_id, new_name)
+        if ok:
+            self.refresh()
+        return ok
+
+    def delete_session(self, session_id: str) -> bool:
+        ok = self._controller.delete_session(session_id)
+        if ok:
+            self.refresh()
+        return ok
+
+    def _on_rename_clicked(self) -> None:
+        row = self._selected_row()
+        if row is None:
+            return
+        sid = self.session_id_at(row)
+        if sid is None:
+            return
+        current = self.table.item(row, 0).text()
+        new_name, ok = QInputDialog.getText(self, "Rename session", "New name:", text=current)
+        if ok and new_name.strip():
+            self.rename_session(sid, new_name.strip())
+
+    def _on_delete_clicked(self) -> None:
+        row = self._selected_row()
+        if row is None:
+            return
+        sid = self.session_id_at(row)
+        if sid is None:
+            return
+        current = self.table.item(row, 0).text()
+        reply = QMessageBox.question(
+            self,
+            "Delete session",
+            f"Delete '{current}' permanently?\nThis cannot be undone.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply == QMessageBox.Yes:
+            self.delete_session(sid)

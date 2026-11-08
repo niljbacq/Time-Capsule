@@ -66,3 +66,57 @@ class SessionsController:
     @property
     def is_empty(self) -> bool:
         return self._loaded and self._last_error is None and not self._sessions
+
+    def rename_session(self, session_id: str, new_name: str) -> bool:
+        try:
+            self._service.rename_session(session_id, new_name)
+        except Exception as exc:  # noqa: BLE001
+            self._last_error = str(exc) or type(exc).__name__
+            return False
+        self._last_error = None
+        return True
+
+    def delete_session(self, session_id: str) -> bool:
+        try:
+            self._service.delete_session(session_id)
+        except Exception as exc:  # noqa: BLE001
+            self._last_error = str(exc) or type(exc).__name__
+            return False
+        self._last_error = None
+        return True
+
+    def rename_session(self, session_id: str, new_name: str) -> bool:
+        try:
+            self._service.rename_session(session_id, new_name)
+        except Exception as exc:  # noqa: BLE001
+            self._last_error = str(exc) or type(exc).__name__
+            return False
+        self._last_error = None
+        return True
+
+    def delete_session(self, session_id: str) -> bool:
+        try:
+            self._service.delete_session(session_id)
+        except Exception as exc:  # noqa: BLE001
+            self._last_error = str(exc) or type(exc).__name__
+            return False
+        self._last_error = None
+        return True
+
+    def rename_session(self, session_id: str, new_name: str) -> bool:
+        try:
+            self._service.rename_session(session_id, new_name)
+        except Exception as exc:  # noqa: BLE001
+            self._last_error = str(exc) or type(exc).__name__
+            return False
+        self._last_error = None
+        return True
+
+    def delete_session(self, session_id: str) -> bool:
+        try:
+            self._service.delete_session(session_id)
+        except Exception as exc:  # noqa: BLE001
+            self._last_error = str(exc) or type(exc).__name__
+            return False
+        self._last_error = None
+        return True
