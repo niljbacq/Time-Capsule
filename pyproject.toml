@@ -19,6 +19,7 @@ dev = ["pytest>=8.0"]
 
 [project.scripts]
 sessionctl = "session_snapshot.cli.main:main"
+sessiongui = "session_snapshot.gui.entry:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/session_snapshot"]
