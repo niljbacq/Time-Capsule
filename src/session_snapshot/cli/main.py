@@ -267,7 +267,17 @@ def _build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("doctor", help="print diagnostic information")
     p.set_defaults(handler=_cmd_doctor)
 
+    p = sub.add_parser("gui", help="open the graphical interface")
+    p.set_defaults(handler=_cmd_gui)
+
     return parser
+
+
+def _cmd_gui(args: argparse.Namespace) -> int:
+    """Open the GUI. PySide6 is imported only here so the CLI works without it."""
+    from session_snapshot.gui.entry import main as gui_main
+
+    return gui_main([])
 
 
 def main(argv: Sequence[str] | None = None) -> int:
