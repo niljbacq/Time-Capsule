@@ -1,7 +1,8 @@
 """Offscreen tests for the GUI main window shell.
 
-Every SettingsStore points at tmp_path: these tests must never read or write
-the user's real GUI configuration.
+Every SettingsStore points at tmp_path, and every MainWindow gets a fake
+SessionsController. These tests must never touch the user's real GUI config
+or the real session store.
 """
 
 import json
@@ -16,8 +17,15 @@ pytest.importorskip("PySide6.QtSvg")
 from PySide6.QtWidgets import QApplication
 
 from session_snapshot.gui import navigation, theme
+from session_snapshot.gui.controllers.sessions_controller import SessionsController
 from session_snapshot.gui.main_window import MainWindow, system_is_dark
 from session_snapshot.gui.settings import GuiSettings, SettingsStore
+from session_snapshot.models.summaries import SessionList
+
+
+class _EmptyService:
+    def list_sessions(self):
+        return SessionList()
 
 
 @pytest.fixture(scope="session")
@@ -26,13 +34,18 @@ def qt_app():
 
 
 @pytest.fixture
+def fake_sessions():
+    return SessionsController(_EmptyService())
+
+
+@pytest.fixture
 def store(tmp_path):
     return SettingsStore(tmp_path / "gui.json")
 
 
 @pytest.fixture
-def window(qt_app, store):
-    win = MainWindow(store)
+def window(qt_app, store, fake_sessions):
+    win = MainWindow(store, sessions_controller=fake_sessions)
     yield win
     win.close()
 
@@ -72,10 +85,10 @@ def test_collapse_button_syncs_state_and_settings(window):
     assert window.state.collapsed is False
 
 
-def test_stored_collapsed_state_applied_on_start(qt_app, tmp_path):
+def test_stored_collapsed_state_applied_on_start(qt_app, tmp_path, fake_sessions):
     store = SettingsStore(tmp_path / "gui.json")
     store.save(GuiSettings(sidebar_collapsed=True))
-    win = MainWindow(store)
+    win = MainWindow(store, sessions_controller=fake_sessions)
     try:
         assert win.state.collapsed is True
     finally:
@@ -92,7 +105,7 @@ def test_theme_preference_applied_to_stylesheet(window):
     assert "1E3A5F" in window.styleSheet()
 
 
-def test_geometry_restored_from_settings(qt_app, tmp_path):
+def test_geometry_restored_from_settings(qt_app, tmp_path, fake_sessions):
     store = SettingsStore(tmp_path / "gui.json")
     store.save(
         GuiSettings(
@@ -103,7 +116,7 @@ def test_geometry_restored_from_settings(qt_app, tmp_path):
             window_maximized=False,
         )
     )
-    win = MainWindow(store)
+    win = MainWindow(store, sessions_controller=fake_sessions)
     try:
         assert (win.width(), win.height()) == (1000, 700)
         assert (win.pos().x(), win.pos().y()) == (50, 60)
@@ -119,9 +132,9 @@ def test_current_settings_reflects_live_geometry(window):
     assert (settings.window_x, settings.window_y) == (10, 20)
 
 
-def test_close_writes_settings_to_given_store(qt_app, tmp_path):
+def test_close_writes_settings_to_given_store(qt_app, tmp_path, fake_sessions):
     path = tmp_path / "gui.json"
-    win = MainWindow(SettingsStore(path))
+    win = MainWindow(SettingsStore(path), sessions_controller=fake_sessions)
     win.resize(880, 620)
     win.close()
     assert win.save_error is None
@@ -131,10 +144,10 @@ def test_close_writes_settings_to_given_store(qt_app, tmp_path):
     assert data["window_height"] == 620
 
 
-def test_close_records_save_error_instead_of_raising(qt_app, tmp_path):
-    blocker = tmp_path / "blocker"
+def test_close_records_save_error_instead_of_raising(qt_app, tmp_path, fake_sessions):
+    blocker = tmp_path / "blocked"
     blocker.write_text("not a directory", encoding="utf-8")
-    win = MainWindow(SettingsStore(blocker / "gui.json"))
+    win = MainWindow(SettingsStore(blocker / "gui.json"), sessions_controller=fake_sessions)
     try:
         assert isinstance(win.save_error, OSError) is False
         win.close()
@@ -143,15 +156,21 @@ def test_close_records_save_error_instead_of_raising(qt_app, tmp_path):
         win.close()
 
 
-def test_close_keeps_theme_preference(qt_app, tmp_path):
+def test_close_keeps_theme_preference(qt_app, tmp_path, fake_sessions):
     path = tmp_path / "gui.json"
-    win = MainWindow(SettingsStore(path))
+    win = MainWindow(SettingsStore(path), sessions_controller=fake_sessions)
     win.apply_theme("dark")
     win.close()
     data = json.loads(path.read_text(encoding="utf-8"))
     assert data["theme"] == "dark"
 
 
+def test_sessions_page_is_in_stack_and_labelled(window):
+    page = window.sessions_page
+    assert page is not None
+    assert window.page("sessions") is page
+    assert page.title_label.text() == "Sessions"
+
+
 def test_system_is_dark_returns_bool(qt_app):
-    from session_snapshot.gui.main_window import system_is_dark
     assert isinstance(system_is_dark(), bool)
