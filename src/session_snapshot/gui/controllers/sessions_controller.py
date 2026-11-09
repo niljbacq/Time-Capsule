@@ -85,7 +85,6 @@ class SessionsController:
         self._last_error = None
         return True
 
-    def rename_session(self, session_id: str, new_name: str) -> bool:
         try:
             self._service.rename_session(session_id, new_name)
         except Exception as exc:  # noqa: BLE001
@@ -94,7 +93,6 @@ class SessionsController:
         self._last_error = None
         return True
 
-    def delete_session(self, session_id: str) -> bool:
         try:
             self._service.delete_session(session_id)
         except Exception as exc:  # noqa: BLE001
@@ -103,7 +101,6 @@ class SessionsController:
         self._last_error = None
         return True
 
-    def rename_session(self, session_id: str, new_name: str) -> bool:
         try:
             self._service.rename_session(session_id, new_name)
         except Exception as exc:  # noqa: BLE001
@@ -112,7 +109,6 @@ class SessionsController:
         self._last_error = None
         return True
 
-    def delete_session(self, session_id: str) -> bool:
         try:
             self._service.delete_session(session_id)
         except Exception as exc:  # noqa: BLE001
