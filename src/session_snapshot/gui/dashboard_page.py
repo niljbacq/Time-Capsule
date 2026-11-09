@@ -1,4 +1,4 @@
-"""Dashboard page: primary Save action for the current desktop."""
+"""Dashboard page: primary Save and Restore actions for the current desktop."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 
 from session_snapshot.gui import styles
 from session_snapshot.gui.controllers.sessions_controller import SessionsController
+from session_snapshot.gui.restore_preview_dialog import RestorePreviewDialog
 from session_snapshot.report.models import SaveReport
 
 PAGE_TITLE = "Dashboard"
@@ -24,14 +25,11 @@ PURPOSE_TEXT = "Save and restore the arrangement of your desktop applications."
 
 
 def session_id_from_name(name: str) -> str:
-    """Turn a human name into a session id: lowercase letters, digits, hyphens."""
     slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
     return slug or "session"
 
 
 class DashboardPage(QWidget):
-    """Dashboard with the primary Save action."""
-
     session_saved = Signal(str)
 
     def __init__(
@@ -61,6 +59,10 @@ class DashboardPage(QWidget):
         self.save_button.setObjectName(styles.PRIMARY_BUTTON)
         self.save_button.clicked.connect(self._on_save_clicked)
         action_bar.addWidget(self.save_button)
+        self.restore_button = QPushButton("Restore session\u2026", self)
+        self.restore_button.setObjectName(styles.SECONDARY_BUTTON)
+        self.restore_button.clicked.connect(self._on_restore_clicked)
+        action_bar.addWidget(self.restore_button)
         action_bar.addStretch(1)
         layout.addLayout(action_bar)
 
@@ -75,6 +77,32 @@ class DashboardPage(QWidget):
         layout.addWidget(self.error_label)
 
         layout.addStretch(1)
+
+    def _on_restore_clicked(self) -> None:
+        self._controller.refresh()
+        sessions = self._controller.sessions
+        if not sessions:
+            self.error_label.setText("No saved sessions to restore. Save one first.")
+            self.status_label.setText("")
+            return
+        displays = [f"{s.name} ({s.session_id})" for s in sessions]
+        choice, ok = QInputDialog.getItem(
+            self, "Restore session", "Session:", displays, 0, False
+        )
+        if not ok:
+            return
+        selected = next(
+            (s for s in sessions if f"{s.name} ({s.session_id})" == choice), None
+        )
+        if selected is None:
+            return
+        preview = self._controller.preview(selected.session_id)
+        if preview is None:
+            err = self._controller.last_error or "unknown error"
+            self.error_label.setText(f"Could not preview: {err}")
+            return
+        self.error_label.setText("")
+        RestorePreviewDialog(preview, self).exec()
 
     def _on_save_clicked(self) -> None:
         name, ok = QInputDialog.getText(self, "Save session", "Session name:")
@@ -98,7 +126,6 @@ class DashboardPage(QWidget):
         self.save_session(name)
 
     def save_session(self, name: str) -> SaveReport | None:
-        """Save the current desktop under the given name. No prompt."""
         session_id = session_id_from_name(name)
         report = self._controller.save_session(session_id, name)
         if report is None:

@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 
 from session_snapshot.gui import styles
 from session_snapshot.gui.controllers.sessions_controller import SessionsController
+from session_snapshot.gui.restore_preview_dialog import RestorePreviewDialog
 
 PAGE_TITLE = "Sessions"
 COLUMNS = ("Name", "Saved", "Apps", "Environment")
@@ -27,7 +28,6 @@ COLUMN_WIDTHS = (300, 160, 60, 150)
 
 
 def format_saved_at(value: datetime) -> str:
-    """Format a tz-aware timestamp for the Saved column, in local time."""
     try:
         local = value.astimezone()
     except (ValueError, OSError):
@@ -36,8 +36,6 @@ def format_saved_at(value: datetime) -> str:
 
 
 class SessionsPage(QWidget):
-    """One table of saved sessions, plus empty / problems / error states."""
-
     def __init__(self, controller: SessionsController, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._controller = controller
@@ -86,12 +84,17 @@ class SessionsPage(QWidget):
         layout.addWidget(self.table, 1)
 
         action_bar = QHBoxLayout()
-        self.rename_button = QPushButton("Rename…", self)
+        self.preview_button = QPushButton("Preview\u2026", self)
+        self.preview_button.setObjectName(styles.SECONDARY_BUTTON)
+        self.preview_button.setEnabled(False)
+        self.preview_button.clicked.connect(self._on_preview_clicked)
+        action_bar.addWidget(self.preview_button)
+        self.rename_button = QPushButton("Rename\u2026", self)
         self.rename_button.setObjectName(styles.SECONDARY_BUTTON)
         self.rename_button.setEnabled(False)
         self.rename_button.clicked.connect(self._on_rename_clicked)
         action_bar.addWidget(self.rename_button)
-        self.delete_button = QPushButton("Delete…", self)
+        self.delete_button = QPushButton("Delete\u2026", self)
         self.delete_button.setObjectName(styles.SECONDARY_BUTTON)
         self.delete_button.setEnabled(False)
         self.delete_button.clicked.connect(self._on_delete_clicked)
@@ -100,8 +103,6 @@ class SessionsPage(QWidget):
         layout.addLayout(action_bar)
 
         self.table.itemSelectionChanged.connect(self._update_action_state)
-
-    # -- data flow --------------------------------------------------------
 
     def refresh(self) -> None:
         self._controller.refresh()
@@ -155,8 +156,6 @@ class SessionsPage(QWidget):
         else:
             self.summary_label.setText("")
 
-    # -- accessors (used by controllers and tests) ------------------------
-
     def row_count(self) -> int:
         return self.table.rowCount()
 
@@ -176,6 +175,7 @@ class SessionsPage(QWidget):
 
     def _update_action_state(self) -> None:
         has_selection = self.selected_session_id() is not None
+        self.preview_button.setEnabled(has_selection)
         self.rename_button.setEnabled(has_selection)
         self.delete_button.setEnabled(has_selection)
 
@@ -190,6 +190,18 @@ class SessionsPage(QWidget):
         if ok:
             self.refresh()
         return ok
+
+    def _on_preview_clicked(self) -> None:
+        sid = self.selected_session_id()
+        if sid is None:
+            return
+        preview = self._controller.preview(sid)
+        if preview is None:
+            err = self._controller.last_error or "unknown error"
+            self.error_label.setText(f"Could not preview: {err}")
+            self.error_label.setVisible(True)
+            return
+        RestorePreviewDialog(preview, self).exec()
 
     def _on_rename_clicked(self) -> None:
         row = self._selected_row()
