@@ -30,6 +30,7 @@ from session_snapshot.gui.settings import MIN_WINDOW_SIZE, GuiSettings, Settings
 from session_snapshot.gui.sidebar import Sidebar
 from session_snapshot.gui.controllers.sessions_controller import SessionsController
 from session_snapshot.gui.sessions_page import SessionsPage
+from session_snapshot.gui.dashboard_page import DashboardPage
 from session_snapshot.services.factory import create_default_service
 from session_snapshot.gui.theme import (
     Palette,
@@ -79,6 +80,7 @@ class MainWindow(QMainWindow):
             else SessionsController(create_default_service())
         )
         self._sessions_page: SessionsPage | None = None
+        self._dashboard_page: DashboardPage | None = None
 
         self.setWindowTitle(WINDOW_TITLE)
         self.setMinimumSize(*MIN_WINDOW_SIZE)
@@ -104,6 +106,9 @@ class MainWindow(QMainWindow):
             if item.id == "sessions":
                 page: QWidget = SessionsPage(self._sessions_controller, central)
                 self._sessions_page = page
+            elif item.id == "dashboard":
+                page = DashboardPage(self._sessions_controller, central)
+                self._dashboard_page = page
             else:
                 page = self._build_page(item.label)
             self._pages[item.id] = page
@@ -136,6 +141,8 @@ class MainWindow(QMainWindow):
             return False
         self._stack.setCurrentIndex(page_index(self._state.active))
         self._sidebar.set_active(self._state.active)
+        if self._state.active == "sessions" and self._sessions_page is not None:
+            self._sessions_page.refresh()
         return True
 
     def _on_collapsed_changed(self, collapsed: bool) -> None:
@@ -215,6 +222,10 @@ class MainWindow(QMainWindow):
     @property
     def sessions_page(self) -> SessionsPage | None:
         return self._sessions_page
+
+    @property
+    def dashboard_page(self) -> DashboardPage | None:
+        return self._dashboard_page
 
     def page(self, page_id: str) -> QWidget | None:
         return self._pages.get(page_id)
