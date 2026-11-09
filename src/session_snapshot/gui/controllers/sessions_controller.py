@@ -12,7 +12,7 @@ from session_snapshot.models.summaries import (
     SessionProblem,
     SessionSummary,
 )
-from session_snapshot.report.models import SaveReport
+from session_snapshot.report.models import RestorePreview, SaveReport
 from session_snapshot.services.session_service import SessionService
 
 
@@ -96,6 +96,24 @@ class SessionsController:
             return None
         self._last_error = None
         return report
+
+    def save_session(
+        self, session_id: str, name: str, description: str = ""
+    ) -> SaveReport | None:
+        try:
+            report = self._service.save(session_id, name, description)
+        except Exception as exc:  # noqa: BLE001
+            self._last_error = str(exc) or type(exc).__name__
+            return None
+        self._last_error = None
+        return report
+
+    def preview(self, session_id: str) -> RestorePreview | None:
+        try:
+            return self._service.preview(session_id)
+        except Exception as exc:  # noqa: BLE001
+            self._last_error = str(exc) or type(exc).__name__
+            return None
 
         try:
             self._service.rename_session(session_id, new_name)
